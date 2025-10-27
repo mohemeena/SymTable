@@ -218,10 +218,8 @@ void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
    {
       if (strcmp(psCurrentBinding->pcKey, pcKey) == 0)
       {
-         /* Save value to return. */
          pvValue = psCurrentBinding->pvValue;
 
-         /* Unlink from list. */
          if (psPrevBinding == NULL)
             oSymTable->psFirstBinding
                = psCurrentBinding->psNextBinding;
@@ -229,11 +227,9 @@ void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
             psPrevBinding->psNextBinding
                = psCurrentBinding->psNextBinding;
 
-         /* Free owned memory. */
          free(psCurrentBinding->pcKey);
          free(psCurrentBinding);
 
-         /* Update length. */
          assert(oSymTable->uLength > 0U);
          oSymTable->uLength--;
 

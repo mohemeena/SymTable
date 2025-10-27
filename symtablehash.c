@@ -55,7 +55,8 @@ struct SymTable
 };
 
 /*--------------------------------------------------------------------*/
-/* Return a hash code for pcKey in the range [0, uBucketCount-1].     */
+/* Return a hash code for pcKey that is between 0 and uBucketCount-1,
+   inclusive. */
 
 static size_t SymTable_hash(const char *pcKey, size_t uBucketCount)
 {
@@ -118,9 +119,6 @@ SymTable_T SymTable_new(void)
 }
 
 /*--------------------------------------------------------------------*/
-/* Free all memory owned by oSymTable: the copied key strings, the    */
-/* Binding structs, the bucket array, and then the SymTable itself.   */
-/* Never free pvValue.                                                */
 
 void SymTable_free(SymTable_T oSymTable)
 {
@@ -139,8 +137,6 @@ void SymTable_free(SymTable_T oSymTable)
          psNext = psCurrent->psNextBinding;
 
          free(psCurrent->pcKey);
-         /* Do not free psCurrent->pvValue. */
-
          free(psCurrent);
       }
    }
@@ -150,39 +146,12 @@ void SymTable_free(SymTable_T oSymTable)
 }
 
 /*--------------------------------------------------------------------*/
-/* Return number of bindings. Runs in O(1).                           */
 
 size_t SymTable_getLength(SymTable_T oSymTable)
 {
    assert(oSymTable != NULL);
 
    return oSymTable->uLength;
-}
-
-/*--------------------------------------------------------------------*/
-/* Helper: Return Binding for pcKey in oSymTable, or NULL if missing. */
-/* Only searches the correct bucket.                                  */
-
-static struct Binding *SymTable_findBinding(SymTable_T oSymTable,
-                                            const char *pcKey)
-{
-   size_t uIndex;
-   struct Binding *psCurrent;
-
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
-
-   uIndex = SymTable_hash(pcKey, oSymTable->uBucketCount);
-
-   for (psCurrent = oSymTable->ppsBuckets[uIndex];
-        psCurrent != NULL;
-        psCurrent = psCurrent->psNextBinding)
-   {
-      if (strcmp(psCurrent->pcKey, pcKey) == 0)
-         return psCurrent;
-   }
-
-   return NULL;
 }
 
 /*--------------------------------------------------------------------*/
@@ -245,114 +214,135 @@ static void SymTable_expand(SymTable_T oSymTable)
 }
 
 /*--------------------------------------------------------------------*/
-/* Insert (pcKey -> pvValue) if pcKey not already present.            */
-/* Make a defensive copy of pcKey.                                   */
-/* Insert into the appropriate bucket chain (front of list).         */
-/* Increment length.                                                 */
-/* Possibly expand.                                                  */
-/* Return 1 on success, 0 if key exists or memory error.             */
 
 int SymTable_put(SymTable_T oSymTable,
                  const char *pcKey, const void *pvValue)
 {
    struct Binding *psNewBinding;
-   char *pcKeyCopy;
-   size_t uIndex;
+    struct Binding *psCurrent;
+    char *pcKeyCopy;
+    size_t uIndex;
 
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
+    assert(oSymTable != NULL);
+    assert(pcKey != NULL);
 
-   /* If key is already present, do nothing. */
-   if (SymTable_findBinding(oSymTable, pcKey) != NULL)
-      return 0;
+    /* Hash to find the correct bucket. */
+    uIndex = SymTable_hash(pcKey, oSymTable->uBucketCount);
 
-   /* Allocate new binding. */
-   psNewBinding = (struct Binding*)malloc(sizeof(struct Binding));
-   if (psNewBinding == NULL)
-      return 0;
+    /* Return 0 if the key already exists in that bucket. */
+    for (psCurrent = oSymTable->ppsBuckets[uIndex];
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+            return 0;
+    }
 
-   /* Copy the key string. We own this memory now. */
-   pcKeyCopy = (char*)malloc(strlen(pcKey) + 1U);
-   if (pcKeyCopy == NULL)
-   {
-      free(psNewBinding);
-      return 0;
-   }
-   strcpy(pcKeyCopy, pcKey);
+    /* Allocate a new binding node. */
+    psNewBinding = (struct Binding*)malloc(sizeof(struct Binding));
+    if (psNewBinding == NULL)
+        return 0;
 
-   psNewBinding->pcKey = pcKeyCopy;
-   psNewBinding->pvValue = pvValue;
+    /* Copy the key string so this table owns it. */
+    pcKeyCopy = (char*)malloc(strlen(pcKey) + 1U);
+    if (pcKeyCopy == NULL)
+    {
+        free(psNewBinding);
+        return 0;
+    }
+    strcpy(pcKeyCopy, pcKey);
 
-   /* Insert in proper bucket chain (front insert). */
-   uIndex = SymTable_hash(pcKey, oSymTable->uBucketCount);
-   psNewBinding->psNextBinding = oSymTable->ppsBuckets[uIndex];
-   oSymTable->ppsBuckets[uIndex] = psNewBinding;
+    /* Initialize binding fields. */
+    psNewBinding->pcKey = pcKeyCopy;
+    psNewBinding->pvValue = pvValue;
 
-   /* Update length. */
-   oSymTable->uLength++;
+    /* Insert at the front of this bucket's linked list. */
+    psNewBinding->psNextBinding = oSymTable->ppsBuckets[uIndex];
+    oSymTable->ppsBuckets[uIndex] = psNewBinding;
 
-   /* Try to expand if needed. If expansion malloc fails, that's fine. */
-   if (oSymTable->uLength > oSymTable->uBucketCount)
-      SymTable_expand(oSymTable);
+    /* Update binding count. */
+    oSymTable->uLength++;
 
-   return 1;
+    /* No expansion attempted. */
+    return 1;
 }
 
 /*--------------------------------------------------------------------*/
-/* If pcKey exists, replace its stored value with pvValue and return  */
-/* the old value. Otherwise return NULL.                              */
 
 void *SymTable_replace(SymTable_T oSymTable,
                        const char *pcKey, const void *pvValue)
 {
-   struct Binding *psBinding;
-   const void *pvOldValue;
+    struct Binding *psCurrent;
+    const void *pvOldValue;
+    size_t uIndex;
 
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
+    assert(oSymTable != NULL);
+    assert(pcKey != NULL);
 
-   psBinding = SymTable_findBinding(oSymTable, pcKey);
-   if (psBinding == NULL)
-      return NULL;
+    uIndex = SymTable_hash(pcKey, oSymTable->uBucketCount);
 
-   pvOldValue = psBinding->pvValue;
-   psBinding->pvValue = pvValue;
-   return (void*)pvOldValue;
+    for (psCurrent = oSymTable->ppsBuckets[uIndex];
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+        {
+            pvOldValue = psCurrent->pvValue;
+            psCurrent->pvValue = pvValue;
+            return (void*)pvOldValue;
+        }
+    }
+
+    return NULL;
 }
 
 /*--------------------------------------------------------------------*/
-/* Return 1 if pcKey exists in oSymTable, 0 otherwise.                */
 
 int SymTable_contains(SymTable_T oSymTable, const char *pcKey)
 {
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
+   struct Binding *psCurrent;
+    size_t uIndex;
 
-   return (SymTable_findBinding(oSymTable, pcKey) != NULL);
+    assert(oSymTable != NULL);
+    assert(pcKey != NULL);
+
+    uIndex = SymTable_hash(pcKey, oSymTable->uBucketCount);
+
+    for (psCurrent = oSymTable->ppsBuckets[uIndex];
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+            return 1;
+    }
+
+    return 0;
 }
 
 /*--------------------------------------------------------------------*/
-/* Return the value associated with pcKey, or NULL if not found.      */
 
 void *SymTable_get(SymTable_T oSymTable, const char *pcKey)
 {
-   struct Binding *psBinding;
+   struct Binding *psCurrent;
+    size_t uIndex;
 
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
+    assert(oSymTable != NULL);
+    assert(pcKey != NULL);
 
-   psBinding = SymTable_findBinding(oSymTable, pcKey);
-   if (psBinding == NULL)
-      return NULL;
+    uIndex = SymTable_hash(pcKey, oSymTable->uBucketCount);
 
-   return (void*)psBinding->pvValue;
+    for (psCurrent = oSymTable->ppsBuckets[uIndex];
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+            return (void*)psCurrent->pvValue;
+    }
+
+    return NULL;
 }
 
 /*--------------------------------------------------------------------*/
-/* If pcKey exists, remove that binding from its bucket chain, free   */
-/* the key and the Binding struct, decrement uLength, and return the  */
-/* value pointer. Otherwise return NULL.                              */
-/* We never free the value pointer itself.                            */
 
 void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
 {
@@ -400,8 +390,6 @@ void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
 }
 
 /*--------------------------------------------------------------------*/
-/* Call pfApply(pcKey, pvValue, pvExtra) for each binding in the      */
-/* table.                                                             */
 
 void SymTable_map(SymTable_T oSymTable,
                   void (*pfApply)(const char *pcKey,
