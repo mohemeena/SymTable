@@ -9,13 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*--------------------------------------------------------------------*/
-/* Expansion bucket sizes, required by spec.                          */
-
+/* list of bucket sizes used when expanding the hash table */
 static const size_t auBucketCounts[] = {
    509, 1021, 2039, 4093, 8191, 16381, 32749, 65521
 };
 
+/* number of bucket sizes in auBucketCounts */
 enum { BUCKET_COUNTS_LEN = 8 };
 
 /*--------------------------------------------------------------------*/
@@ -93,7 +92,6 @@ static struct Binding **SymTable_allocateBuckets(size_t uBucketCount)
 }
 
 /*--------------------------------------------------------------------*/
-/* Return a new, empty SymTable or NULL if not enough memory.         */
 
 SymTable_T SymTable_new(void)
 {
@@ -172,8 +170,8 @@ static void SymTable_expand(SymTable_T oSymTable)
 
    assert(oSymTable != NULL);
 
-   if (oSymTable->uBucketIndex + 1U >= (size_t)BUCKET_COUNTS_LEN)
-      return;
+   if (oSymTable->uBucketIndex >= (size_t)(BUCKET_COUNTS_LEN - 1))
+    return;
 
    if (oSymTable->uLength <= oSymTable->uBucketCount)
       return;
