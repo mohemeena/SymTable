@@ -155,10 +155,10 @@ size_t SymTable_getLength(SymTable_T oSymTable)
 }
 
 /*--------------------------------------------------------------------*/
-/* Helper: expand the table if uLength > uBucketCount and we're not   */
-/* already at the max bucket size. Rehash all bindings into a new     */
+/* helper for challenge: expand table if uLength > uBucketCount & not */
+/* already at the max bucket size. rehash all bindings into a new     */
 /* bucket array with the next size.                                   */
-/* If allocation fails, silently skip expansion (allowed by spec).    */
+/* if allocation fails, skip expansion                                */
 
 static void SymTable_expand(SymTable_T oSymTable)
 {
@@ -172,23 +172,19 @@ static void SymTable_expand(SymTable_T oSymTable)
 
    assert(oSymTable != NULL);
 
-   /* Are we already at the last bucket size? */
    if (oSymTable->uBucketIndex + 1U >= (size_t)BUCKET_COUNTS_LEN)
       return;
 
-   /* Do we actually need to expand? (length just exceeded old size) */
    if (oSymTable->uLength <= oSymTable->uBucketCount)
       return;
 
    uNewBucketIndex = oSymTable->uBucketIndex + 1U;
    uNewBucketCount = auBucketCounts[uNewBucketIndex];
 
-   /* Try to allocate new buckets. If this fails, bail. */
    ppsNewBuckets = SymTable_allocateBuckets(uNewBucketCount);
    if (ppsNewBuckets == NULL)
       return;
 
-   /* Rehash every binding into the new bucket array. */
    for (u = 0; u < oSymTable->uBucketCount; u++)
    {
       for (psCurrent = oSymTable->ppsBuckets[u];
@@ -204,10 +200,8 @@ static void SymTable_expand(SymTable_T oSymTable)
       }
    }
 
-   /* Free old bucket array (not the bindings themselves). */
    free(oSymTable->ppsBuckets);
 
-   /* Install the new table properties. */
    oSymTable->ppsBuckets = ppsNewBuckets;
    oSymTable->uBucketCount = uNewBucketCount;
    oSymTable->uBucketIndex = uNewBucketIndex;
@@ -226,10 +220,8 @@ int SymTable_put(SymTable_T oSymTable,
     assert(oSymTable != NULL);
     assert(pcKey != NULL);
 
-    /* Hash to find the correct bucket. */
     uIndex = SymTable_hash(pcKey, oSymTable->uBucketCount);
 
-    /* Return 0 if the key already exists in that bucket. */
     for (psCurrent = oSymTable->ppsBuckets[uIndex];
          psCurrent != NULL;
          psCurrent = psCurrent->psNextBinding)
@@ -238,12 +230,10 @@ int SymTable_put(SymTable_T oSymTable,
             return 0;
     }
 
-    /* Allocate a new binding node. */
     psNewBinding = (struct Binding*)malloc(sizeof(struct Binding));
     if (psNewBinding == NULL)
         return 0;
 
-    /* Copy the key string so this table owns it. */
     pcKeyCopy = (char*)malloc(strlen(pcKey) + 1U);
     if (pcKeyCopy == NULL)
     {
@@ -252,18 +242,17 @@ int SymTable_put(SymTable_T oSymTable,
     }
     strcpy(pcKeyCopy, pcKey);
 
-    /* Initialize binding fields. */
     psNewBinding->pcKey = pcKeyCopy;
     psNewBinding->pvValue = pvValue;
 
-    /* Insert at the front of this bucket's linked list. */
     psNewBinding->psNextBinding = oSymTable->ppsBuckets[uIndex];
     oSymTable->ppsBuckets[uIndex] = psNewBinding;
 
-    /* Update binding count. */
     oSymTable->uLength++;
 
-    /* No expansion attempted. */
+    if (oSymTable->uLength > oSymTable->uBucketCount)
+    SymTable_expand(oSymTable);
+
     return 1;
 }
 
@@ -364,8 +353,7 @@ void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
       if (strcmp(psCurrent->pcKey, pcKey) == 0)
       {
          pvValue = psCurrent->pvValue;
-
-         /* Unlink from list. */
+ 
          if (psPrev == NULL)
             oSymTable->ppsBuckets[uIndex] =
                psCurrent->psNextBinding;
