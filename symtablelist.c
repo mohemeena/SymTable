@@ -1,10 +1,8 @@
 /*--------------------------------------------------------------------*/
 /* symtablelist.c                                                     */
-/* Author: Mohemeen Ahmed (modeled on stack6.c style)                 */
 /*--------------------------------------------------------------------*/
 
 #include "symtable.h"
-
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,11 +14,10 @@
 
 struct Binding
 {
-   /* The key string.  The SymTable owns this memory. */
+   /* The key string. */
    char *pcKey;
 
-   /* The value associated with the key.  The SymTable does NOT own
-      this memory. */
+   /* The value associated with the key. */
    const void *pvValue;
 
    /* The address of the next Binding. */
@@ -37,13 +34,11 @@ struct SymTable
    /* The address of the first Binding. */
    struct Binding *psFirstBinding;
 
-   /* The number of bindings in the SymTable. */
+   /* The number of bindings in SymTable. */
    size_t uLength;
 };
 
 /*--------------------------------------------------------------------*/
-
-/* Return a new, empty SymTable, or NULL if insufficient memory. */
 
 SymTable_T SymTable_new(void)
 {
@@ -61,9 +56,6 @@ SymTable_T SymTable_new(void)
 
 /*--------------------------------------------------------------------*/
 
-/* Free all memory occupied by oSymTable, including all bindings and
-   all key strings.  Do not free any values. */
-
 void SymTable_free(SymTable_T oSymTable)
 {
    struct Binding *psCurrentBinding;
@@ -77,12 +69,10 @@ void SymTable_free(SymTable_T oSymTable)
    {
       psNextBinding = psCurrentBinding->psNextBinding;
 
-      /* Free the key string (SymTable owns it). */
+      /* freeing the key string */
       free(psCurrentBinding->pcKey);
 
-      /* Do not free pvValue.  The client owns that memory. */
-
-      /* Free the binding struct. */
+      /* freeing the binding struct */
       free(psCurrentBinding);
    }
 
@@ -90,8 +80,6 @@ void SymTable_free(SymTable_T oSymTable)
 }
 
 /*--------------------------------------------------------------------*/
-
-/* Return the number of bindings in oSymTable. */
 
 size_t SymTable_getLength(SymTable_T oSymTable)
 {
@@ -102,54 +90,30 @@ size_t SymTable_getLength(SymTable_T oSymTable)
 
 /*--------------------------------------------------------------------*/
 
-/* Helper function.
-   Return the Binding whose key is pcKey, or NULL if not found. */
-
-static struct Binding *SymTable_findBinding(SymTable_T oSymTable,
-                                            const char *pcKey)
-{
-   struct Binding *psCurrentBinding;
-
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
-
-   for (psCurrentBinding = oSymTable->psFirstBinding;
-        psCurrentBinding != NULL;
-        psCurrentBinding = psCurrentBinding->psNextBinding)
-   {
-      if (strcmp(psCurrentBinding->pcKey, pcKey) == 0)
-         return psCurrentBinding;
-   }
-
-   return NULL;
-}
-
-/*--------------------------------------------------------------------*/
-
-/* If pcKey is not already in oSymTable, then create a new binding
-   (pcKey -> pvValue), insert it, and return 1.
-   Otherwise leave oSymTable unchanged and return 0.
-   Return 0 if insufficient memory. */
-
 int SymTable_put(SymTable_T oSymTable,
                  const char *pcKey, const void *pvValue)
 {
    struct Binding *psNewBinding;
+   struct Binding *psCurrent;
    char *pcKeyCopy;
 
    assert(oSymTable != NULL);
    assert(pcKey != NULL);
 
-   /* Fail if key already exists. */
-   if (SymTable_findBinding(oSymTable, pcKey) != NULL)
-      return 0;
+   /* return 0 if key already exists */
+   for (psCurrent = oSymTable->psFirstBinding;
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+            return 0;
+    }
 
-   /* Allocate new binding node. */
+   /* allocating memory for the new binding node */
    psNewBinding = (struct Binding*)malloc(sizeof(struct Binding));
    if (psNewBinding == NULL)
       return 0;
 
-   /* Copy the key string so we own it. */
    pcKeyCopy = (char*)malloc(strlen(pcKey) + 1U);
    if (pcKeyCopy == NULL)
    {
@@ -158,15 +122,13 @@ int SymTable_put(SymTable_T oSymTable,
    }
    strcpy(pcKeyCopy, pcKey);
 
-   /* Initialize binding fields. */
+
    psNewBinding->pcKey = pcKeyCopy;
    psNewBinding->pvValue = pvValue;
 
-   /* Insert new binding at the front of the list. */
+   /* insert new binding at the front of the list & update length */
    psNewBinding->psNextBinding = oSymTable->psFirstBinding;
    oSymTable->psFirstBinding = psNewBinding;
-
-   /* Update length. */
    oSymTable->uLength++;
 
    return 1;
@@ -174,64 +136,71 @@ int SymTable_put(SymTable_T oSymTable,
 
 /*--------------------------------------------------------------------*/
 
-/* If pcKey exists, replace its value with pvValue and return the old
-   value. Otherwise, leave oSymTable unchanged and return NULL. */
-
 void *SymTable_replace(SymTable_T oSymTable,
                        const char *pcKey, const void *pvValue)
 {
-   struct Binding *psBinding;
-   const void *pvOldValue;
+   struct Binding *psCurrent;
+    const void *pvOldValue;
 
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
+    assert(oSymTable != NULL);
+    assert(pcKey != NULL);
 
-   psBinding = SymTable_findBinding(oSymTable, pcKey);
-   if (psBinding == NULL)
-      return NULL;
+    for (psCurrent = oSymTable->psFirstBinding;
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+        {
+            pvOldValue = psCurrent->pvValue;
+            psCurrent->pvValue = pvValue;
+            return (void*)pvOldValue;
+        }
+    }
 
-   pvOldValue = psBinding->pvValue;
-   psBinding->pvValue = pvValue;
-   return (void*)pvOldValue;
+    return NULL;
 }
 
 /*--------------------------------------------------------------------*/
-
-/* Return 1 if oSymTable contains pcKey, 0 otherwise. */
 
 int SymTable_contains(SymTable_T oSymTable, const char *pcKey)
 {
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
+   struct Binding *psCurrent;
 
-   return (SymTable_findBinding(oSymTable, pcKey) != NULL);
+    assert(oSymTable != NULL);
+    assert(pcKey != NULL);
+
+    for (psCurrent = oSymTable->psFirstBinding;
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+            return 1;
+    }
+
+    return 0;
 }
 
 /*--------------------------------------------------------------------*/
-
-/* Return the value associated with pcKey, or NULL if no such key
-   exists in oSymTable. */
 
 void *SymTable_get(SymTable_T oSymTable, const char *pcKey)
 {
-   struct Binding *psBinding;
+   struct Binding *psCurrent;
 
-   assert(oSymTable != NULL);
-   assert(pcKey != NULL);
+    assert(oSymTable != NULL);
+    assert(pcKey != NULL);
 
-   psBinding = SymTable_findBinding(oSymTable, pcKey);
-   if (psBinding == NULL)
-      return NULL;
+    for (psCurrent = oSymTable->psFirstBinding;
+         psCurrent != NULL;
+         psCurrent = psCurrent->psNextBinding)
+    {
+        if (strcmp(psCurrent->pcKey, pcKey) == 0)
+            return (void*)psCurrent->pvValue;
+    }
 
-   return (void*)psBinding->pvValue;
+    return NULL;
 }
 
 /*--------------------------------------------------------------------*/
-
-/* If pcKey exists in oSymTable, then remove that binding from the
-   list, free its key string and its struct, decrement length,
-   and return the binding's value pointer.
-   Otherwise return NULL. */
 
 void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
 {
@@ -279,11 +248,6 @@ void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
 }
 
 /*--------------------------------------------------------------------*/
-
-/* Apply function pfApply to each binding in oSymTable.
-   For each binding, call
-      pfApply(pcKey, pvValue, pvExtra).
-   pvExtra is the extra argument supplied by the caller. */
 
 void SymTable_map(SymTable_T oSymTable,
                   void (*pfApply)(const char *pcKey,
