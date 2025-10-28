@@ -27,7 +27,7 @@ struct Binding
 /*--------------------------------------------------------------------*/
 
 /* A SymTable is a "dummy" node that points to the first Binding, and
-   also stores the number of bindings. */
+   stores the number of bindings. */
 
 struct SymTable
 {
@@ -72,10 +72,11 @@ void SymTable_free(SymTable_T oSymTable)
       /* freeing the key string */
       free(psCurrentBinding->pcKey);
 
-      /* freeing the binding struct */
+      /* freeing the current binding */
       free(psCurrentBinding);
    }
 
+   /* freeing all of oSymTable */
    free(oSymTable);
 }
 
@@ -84,7 +85,6 @@ void SymTable_free(SymTable_T oSymTable)
 size_t SymTable_getLength(SymTable_T oSymTable)
 {
    assert(oSymTable != NULL);
-
    return oSymTable->uLength;
 }
 
@@ -149,8 +149,10 @@ void *SymTable_replace(SymTable_T oSymTable,
          psCurrent != NULL;
          psCurrent = psCurrent->psNextBinding)
     {
+        /* if we find the key that we want to replace */
         if (strcmp(psCurrent->pcKey, pcKey) == 0)
         {
+            /* store the old value, replace it, and return the old value */
             pvOldValue = psCurrent->pvValue;
             psCurrent->pvValue = pvValue;
             return (void*)pvOldValue;
@@ -173,10 +175,12 @@ int SymTable_contains(SymTable_T oSymTable, const char *pcKey)
          psCurrent != NULL;
          psCurrent = psCurrent->psNextBinding)
     {
+        /* if we find the key */
         if (strcmp(psCurrent->pcKey, pcKey) == 0)
+        /* return 1 to show key exists */
             return 1;
     }
-
+    /* return 0 to show key does not exist */
     return 0;
 }
 
@@ -193,6 +197,7 @@ void *SymTable_get(SymTable_T oSymTable, const char *pcKey)
          psCurrent != NULL;
          psCurrent = psCurrent->psNextBinding)
     {
+        /* if we find the key, return its value */
         if (strcmp(psCurrent->pcKey, pcKey) == 0)
             return (void*)psCurrent->pvValue;
     }
@@ -216,8 +221,10 @@ void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
 
    while (psCurrentBinding != NULL)
    {
+    /* if we find the key to remove */
       if (strcmp(psCurrentBinding->pcKey, pcKey) == 0)
       {
+        /* store the value to return later */
          pvValue = psCurrentBinding->pvValue;
 
          if (psPrevBinding == NULL)
@@ -230,6 +237,7 @@ void *SymTable_remove(SymTable_T oSymTable, const char *pcKey)
          free(psCurrentBinding->pcKey);
          free(psCurrentBinding);
 
+         /* decrease length as long as it is greater than 0 */
          assert(oSymTable->uLength > 0U);
          oSymTable->uLength--;
 
@@ -260,6 +268,7 @@ void SymTable_map(SymTable_T oSymTable,
         psCurrentBinding != NULL;
         psCurrentBinding = psCurrentBinding->psNextBinding)
    {
+    /* call pfApply for each binding */
       (*pfApply)(psCurrentBinding->pcKey,
                  (void*)psCurrentBinding->pvValue,
                  (void*)pvExtra);
